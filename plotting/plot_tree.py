@@ -56,7 +56,8 @@ def plot_histogram(online_data, key, name, category_name):
 
     hist_online, bin_edges = np.histogram( online_data, bins=plot_configs.get(key, {"bins": 20})["bins"])
 
-    ax.hist( online_data, bins = plot_configs.get(key,{"bins": 20} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data), np.std(online_data)), color="red", alpha=0.5, density=True)
+    # ax.hist( online_data, bins = plot_configs.get(key,{"bins": 20} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data), np.std(online_data)), color="red", alpha=0.5, density=True)
+    ax.hist( online_data, bins = plot_configs.get(key,{"bins": 100} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data), np.std(online_data)), color="red", alpha=0.5, density=True)
     ax.legend()
     if plot_configs.get(key, {"log": False})["log"] is True:
         ax.set_yscale('log')
@@ -77,7 +78,7 @@ def plot_histogram(online_data, key, name, category_name):
                     # verticalalignment='top', bbox=props)
 
 
-    ax.xaxis.set_minor_locator(AutoMinorLocator()) 
+    ax.xaxis.set_minor_locator(AutoMinorLocator())
     ax.tick_params(which='minor', length=4, color='black')
 
     fig.savefig( os.path.join(plot_dir, "{}_{}.png".format(name, key)))
@@ -105,8 +106,8 @@ plot_keys = key_lookup.keys()
 # online_jet_pt = online_tree[key_lookup["jet_pt"]].array()
 online_jet_pt = online_tree["Jet_pt"].array()
 
-# on_pt_mask = (online_jet_pt > 25.) & (online_jet_pt < 1000.)
-on_pt_mask = (online_jet_pt > 0.)
+on_pt_mask = (online_jet_pt > 25.) & (online_jet_pt < 1000.)
+# on_pt_mask = (online_jet_pt > 0.)
 
 # online_nSV = online_tree[key_lookup["TagVarCSV_jetNSecondaryVertices"]].array()
 online_nSV = online_tree["TagVarCSV_jetNSecondaryVertices"].array()
