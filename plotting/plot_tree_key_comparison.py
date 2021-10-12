@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import uproot3 as u3
 import os
 import argparse
-from training_branches import key_lookup, DeepCSV_all_branches 
+from training_branches import key_lookup, DeepCSV_all_branches
 from training_branches import file_comparison
 from scripts.recalculate_flightDistance import recalculate_flightDistance
 from functools import reduce
@@ -66,7 +66,7 @@ def plot_histogram(datasets, dataset_names, key, name, category_name, target_dir
         if np.array( dataset ).size == 0:
             print("Array {}.{} is empty!".format(name, key))
             continue
-        if name == "default": 
+        if name == "default":
             counts, bin_edges = np.histogram(dataset, bins = plot_configs.get(key, plot_config_default)["bins"], density=True )
             bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.
             ax[0].errorbar(bin_centers, counts, marker="o", color="black", linestyle="none", label = "{0} $\mu=${1:1.2f} $\sigma$={2:1.2f}".format(name, np.mean(dataset), np.std(dataset)))
@@ -91,7 +91,7 @@ def plot_histogram(datasets, dataset_names, key, name, category_name, target_dir
     ax[0].grid(which='both', axis='y',linestyle="dashed")
 
     ax[1].axhline(y=1.0, linestyle="dashed", color="grey", alpha=0.5)
-    ax[1].xaxis.set_minor_locator(AutoMinorLocator()) 
+    ax[1].xaxis.set_minor_locator(AutoMinorLocator())
     ax[1].tick_params(which='minor', length=4, color='black')
     ax[1].set_ylabel(
         "$\\frac{{{0}}}{{{1}}}$".format("JetAlgo","default")
@@ -150,7 +150,8 @@ categories = ["all"]
 category_names = ["all"]
 
 # dataset_names = ["", "PuppiJet.", "CaloJet."]
-dataset_names = ["", "PuppiJet."]
+# dataset_names = ["", "PuppiJet."]
+dataset_names = [""]
 
 print("Start plotting loop")
 for cat, cat_name in zip(categories, category_names):
@@ -172,7 +173,7 @@ for cat, cat_name in zip(categories, category_names):
             print(e)
             print("Error during key:\t{}".format(key))
             print("Exiting...")
-            quit() 
+            quit()
 
         if plot_configs.get(key, None) is not None:
             if plot_configs[key].get("underflow", False) is not False:
