@@ -1,0 +1,230 @@
+import matplotlib.pyplot as plt
+import uproot3 as u3
+import os
+import argparse
+import numpy as np
+from scripts.training_branches import key_lookup, DeepCSV_all_branches, new_ntuple_keys,file_comparison
+from scripts.recalculate_flightDistance import recalculate_flightDistance
+from functools import reduce
+from matplotlib.ticker import AutoMinorLocator
+
+plot_configs = {'jet_pt':{"bins": np.arange(0, 1000, 25) , "log": True},
+                'jet_eta':{"bins": np.linspace(-4.2, 4.2, 20) , "log": False},
+                'TagVarCSV_jetNSecondaryVertices':{"bins": np.arange(0, 10, 1) , "log": True},
+                'TagVarCSV_trackSumJetEtRatio':{"bins": np.linspace(0, 10, 10) , "log": True, "underflow": -999.},
+                'TagVarCSV_trackSumJetDeltaR':{"bins": np.linspace(0, 5, 10) , "log": True, "underflow": -999.},
+                'TagVarCSV_vertexCategory':{"bins": np.arange(0, 3, 1) , "log": True, "underflow": -999.},
+                'TagVarCSV_trackSip2dValAboveCharm':{"bins": np.linspace(-1., 0.2, 25) , "log": True, "underflow": -999.},
+                'TagVarCSV_trackSip2dSigAboveCharm':{"bins": np.linspace(-300., 400., 20) , "log": True, "underflow": -999.},
+                'TagVarCSV_trackSip3dValAboveCharm':{"bins": np.linspace(-2., 2., 15), "log": True, "underflow": -999.},
+                'TagVarCSV_trackSip3dSigAboveCharm':{"bins": np.linspace(-1100, 500, 30) , "log": True},
+                'TagVarCSV_jetNTracksEtaRel':{"bins": np.linspace(0, 12, 12) , "log": False},
+                'TagVarCSV_trackEtaRel':{"bins": np.linspace(0, 12, 12) , "log": False},
+                'TagVarCSV_vertexMass':{"bins": np.linspace(0, 550, 24) , "log": True},
+                'TagVarCSV_vertexNTracks':{"bins": np.arange(0, 32, 1) , "log": True},
+                'TagVarCSV_vertexEnergyRatio':{"bins": np.linspace(0, 200, 30) , "log": True},
+                'TagVarCSV_vertexJetDeltaR':{"bins": np.linspace(0., 0.3, 30) , "log": True},
+                'TagVarCSV_flightDistance2dVal':{"bins": np.linspace(0., 2.5, 40) , "log": True},
+                'TagVarCSV_flightDistance2dSig':{"bins": np.linspace(0., 1600, 20) , "log": True},
+                'TagVarCSV_flightDistance3dVal':{"bins":  np.linspace(0., 40, 40), "log": True},
+                'TagVarCSV_flightDistance3dSig':{"bins": np.linspace(0., 1600, 40) , "log": True},
+                'TagVarCSVTrk_trackDecayLenVal':{"bins": np.arange(0, 6, 1) , "log": True},
+                'TagVarCSVTrk_trackSip2dSig':{"bins": np.arange(-300, 400, 20) , "log": True},
+                'TagVarCSVTrk_trackSip3dSig':{"bins": np.arange(-800, 800, 20) , "log": True},
+                'TagVarCSVTrk_trackPtRatio':{"bins": np.linspace(0, 0.3, 20) , "log": True},
+                'TagVarCSVTrk_trackDeltaR':{"bins": np.linspace(0., 0.3, 20) , "log": True},
+                'TagVarCSV_jetNSelectedTracks':{"bins": np.arange(0, 60, 1) , "log": False},
+                'TagVarCSVTrk_trackPtRel':{"bins": np.linspace(0., 60, 30) , "log": True},
+                'TagVarCSVTrk_trackJetDistVal':{"bins": np.linspace(-0.08, 0., 15) , "log": True}
+                }
+
+plot_config_default = {"bins": 100,
+                       "log": True}
+
+def compute_ratios(hist_online, hist_offline, bin_edges):
+    r_a = hist_online / np.sum(hist_online)
+    r_b = hist_offline / np.sum(hist_offline)
+    ratios = r_a / (r_b + 1e-9)
+
+    bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+    bin_widths = np.diff(bin_centers)
+    bin_widths = np.append(bin_widths, bin_widths[-1]) / 2.0
+
+    return ratios, bin_centers
+
+def plot_histogram(datasets, dataset_names, key, name, category_name, target_dir):
+    fig, ax = plt.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]})
+    fig.subplots_adjust(hspace=0)
+
+    for i_hist, (dataset, name, colour) in enumerate(zip(datasets, dataset_names, ["black", "orange", "blue"])):
+        if not np.isfinite(dataset).all():
+            print("Debugging: Non finite value detected in {}.{}".format(name, key))
+        if np.array( dataset ).size == 0:
+            print("Array {}.{} is empty!".format(name, key))
+            continue
+        # if name == "default":
+        if name == "b_jets":
+            counts, bin_edges = np.histogram(dataset, bins = plot_configs.get(key, plot_config_default)["bins"], density=True )
+            bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.
+            ax[0].errorbar(bin_centers, counts, marker=".", color="black", linestyle="none", label = "{0} $\mu=${1:1.2f} $\sigma$={2:1.2f}".format(name, np.mean(dataset), np.std(dataset)))
+        else:
+            hatch = None
+            counts_comp, bin_edges = np.histogram(dataset, bins = plot_configs.get(key, plot_config_default)["bins"], density=True )
+            # bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.
+            ax[0].hist(dataset, bins = plot_configs.get(key, plot_config_default)["bins"], color=colour, label = "{0} $\mu=${1:1.2f} $\sigma$={2:1.2f}".format(name, np.mean(dataset), np.std(dataset)), alpha=0.5, density=True, hatch=hatch)
+            ratios = np.zeros(len(counts))
+            ax[1].errorbar(
+                bin_centers,
+                np.divide( counts_comp, counts, out=ratios, where=counts!=0),
+                color=colour,
+                linestyle="None",
+                marker=".",
+            )
+    ax[0].legend()
+    if plot_configs.get(key, plot_config_default)["log"] is True:
+        ax[0].set_yscale('log')
+    ax[0].set_ylabel("N, normalized", fontsize=15)
+    ax[0].set_title("{}\n{}".format(name, category_name), fontsize=15)
+    ax[0].grid(which='both', axis='y',linestyle="dashed")
+
+    ax[1].axhline(y=1.0, linestyle="dashed", color="grey", alpha=0.5)
+    ax[1].xaxis.set_minor_locator(AutoMinorLocator())
+    ax[1].tick_params(which='minor', length=4, color='black')
+    ax[1].set_ylabel(
+        "$\\frac{{{0}}}{{{1}}}$".format("light","b")
+    )
+
+    ax[1].set_xlabel(key, fontsize=15)
+    ax[1].set_ylim(
+        0.2, 5.0)
+    if plot_configs.get(key, None) is not None:
+        ax[0].set_xlim(plot_configs[key]["bins"][0],plot_configs[key]["bins"][-1])
+        ax[1].set_xlim(plot_configs[key]["bins"][0],plot_configs[key]["bins"][-1])
+
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    # place a text box in upper left in axes coords
+    try:
+        textstr = "Debugging Work!"
+        # textstr = "Online:\nmin {0:1.2f}\nmax {1:1.2f}\nOffline:\nmin {2:1.2f}\nmax {3:1.2f}".format( np.min(online_data), np.max(online_data), np.min(offline_data), np.max(offline_data))
+        # if tot_underflows != None:
+            # textstr += "\nUnderflows: {}".format(tot_underflows)
+    except ValueError as e:
+        print(e)
+        textstr = "Error"
+    # ax[0].text(0.8, 0.75, textstr, transform=ax[0].transAxes, fontsize=8,
+    #                 verticalalignment='top', bbox=props)
+
+
+
+    fig.savefig( os.path.join(target_dir, "{}.pdf".format(key)))
+    fig.savefig( os.path.join(target_dir, "{}.png".format(key)))
+    plt.close()
+
+def plot_histogram_old(online_data,online_data2, key, name, category_name,category_name2):
+    # fig, ax = plt.subplots(1, 1)
+    # fig.subplots_adjust(hspace=0)
+
+    fig, ax = plt.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]})
+    fig.subplots_adjust(hspace=0)
+
+    hist_online, bin_edges = np.histogram( online_data, bins=plot_configs.get(key, {"bins": 100})["bins"])
+    hist_online2, bin_edges2 = np.histogram( online_data2, bins=plot_configs.get(key, {"bins": 100})["bins"])
+
+    # ax.hist( online_data, bins = plot_configs.get(key,{"bins": 20} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data), np.std(online_data)), color="red", alpha=0.5, density=True)
+    ax[0].hist( online_data, bins = plot_configs.get(key,{"bins": 100} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data), np.std(online_data)), color="red", alpha=0.5, density=True)
+    ax[1].hist( online_data2, bins = plot_configs.get(key,{"bins": 100} )["bins"],  label = "Online $\mu=${0:1.2f} $\sigma$={1:1.2f}".format(np.mean(online_data2), np.std(online_data2)), color="blue", alpha=0.5, density=True)
+    ax[0].legend()
+    if plot_configs.get(key, {"log": False})["log"] is True:
+        ax[0].set_yscale('log')
+        ax[1].set_yscale('log')
+    ax[0].set_ylabel("N, normalized", fontsize=15)
+    ax[0].set_title("{}\n{}".format(name, category_name), fontsize=15)
+    ax[1].set_title("{}\n{}".format(name, category_name2), fontsize=15)
+    ax[0].grid(which='both', axis='y',linestyle="dashed")
+    ax[1].grid(which='both', axis='y',linestyle="dashed")
+
+    # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    # # place a text box in upper left in axes coords
+    # try:
+        # textstr = "Online:\nmin {0:1.2f}\nmax {1:1.2f}\nOffline:\nmin {2:1.2f}\nmax {3:1.2f}".format( np.min(online_data), np.max(online_data), np.min(offline_data), np.max(offline_data))
+        # if tot_underflows != None:
+            # textstr += "\nUnderflows: {}".format(tot_underflows)
+    # except ValueError as e:
+        # print(e)
+        # textstr = "Error"
+    # ax.text(0.8, 0.75, textstr, transform=ax[0].transAxes, fontsize=8,
+                    # verticalalignment='top', bbox=props)
+
+
+    ax[0].xaxis.set_minor_locator(AutoMinorLocator())
+    ax[0].tick_params(which='minor', length=4, color='black')
+
+    fig.savefig( os.path.join(plot_dir, "{}_{}.png".format(name, key)))
+    fig.savefig( os.path.join(plot_dir, "{}_{}.pdf".format(name, key)))
+    plt.close()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--file", "-i", help="Input root-file", type=str)
+parser.add_argument("--output", "-o", help="Output directory TAG. For example v02 to add a v02 at the end of the root-file", type=str, default="v00")
+parser.add_argument("--target", "-t", help="Target directory.", type=str, default="./dataset_comp")
+args = parser.parse_args()
+
+online_file = args.file
+target_dir = args.target
+output_tag = args.output
+process_name = online_file.split("/")[-1].split(".")[0]
+
+base_dir = os.path.join(target_dir, "{}_{}".format(process_name, output_tag))
+os.makedirs(base_dir, exist_ok=True)
+
+online_tree =  u3.open(online_file)["ttree"]
+
+plot_keys = key_lookup.keys()
+
+# online_jet_pt = online_tree[key_lookup["jet_pt"]].array()
+online_jet_pt = online_tree["Jet_pt"].array()
+
+on_pt_mask = (online_jet_pt > 25.) & (online_jet_pt < 1000.)
+# on_pt_mask = (online_jet_pt > 0.)
+
+# online_nSV = online_tree[key_lookup["TagVarCSV_jetNSecondaryVertices"]].array()
+online_nSV = online_tree["TagVarCSV_jetNSecondaryVertices"].array()
+
+on_nSV_mask = online_nSV >= 0
+
+
+category_names = ["b_jets", "bb+gbb_jets", "lepb_jets", "c+cc+gcc_jets", "uds_jets", "g_jes", "all_jets"]
+# categories = [ ['isB'], ['isBB', 'isGBB'], ['isLeptonicB', 'isLeptonicB_C'], ['isC', 'isCC', 'isGCC'], ['isUD', 'isS'], ['isG'], ['isB','isBB', 'isGBB', 'isLeptonicB', 'isLeptonicB_C', 'isC', 'isCC', 'isGCC','isUD', 'isS', 'isG']]
+categories = [ ['Jet_isB'], ['Jet_isBB', 'Jet_isGBB'], ['Jet_isLeptonicB', 'Jet_isLeptonicB_C'], ['Jet_isC', 'Jet_isCC', 'Jet_isGCC'], ['Jet_isUD', 'Jet_isS'], ['Jet_isG'], ['Jet_isB','Jet_isBB', 'Jet_isGBB', 'Jet_isLeptonicB', 'Jet_isLeptonicB_C', 'Jet_isC', 'Jet_isCC', 'Jet_isGCC','Jet_isUD', 'Jet_isS', 'Jet_isG']]
+
+cat = ['Jet_isB']
+cat2 = ['Jet_isUD', 'Jet_isS']
+cat_name = "b_jets"
+cat_name2 = "uds_jets"
+# for cat, cat_name in zip(categories, category_names):
+plot_dir = os.path.join( base_dir, cat_name )
+os.makedirs(plot_dir, exist_ok=True)
+
+
+
+# online_mask = reduce(np.logical_or , [ online_tree[key_lookup[k]].array() == 1 for k in cat])
+online_mask = reduce(np.logical_or , [ online_tree[k].array() == 1 for k in cat])
+online_mask2 = reduce(np.logical_or , [ online_tree[k].array() == 1 for k in cat2])
+
+online_mask = on_pt_mask & online_mask
+
+# for key  in plot_configs.keys():
+for key  in new_ntuple_keys:
+    if key in list(map(lambda x: x.decode("utf-8"), online_tree.keys())):
+        online_data_orig = online_tree[key].array()
+
+        print("key:\t", key)
+        # if "vertex" in key:
+            # print("Setting Values to 0:\nOnline:\t{}\nOffline:\t{}".format(sum(np.invert(on_nSV_mask)), sum(np.invert(off_nSV_mask))))
+            # online_data[np.invert(on_nSV_mask)] *= 0.
+
+        online_data = online_data_orig[online_mask].flatten()
+        online_data2 = online_data_orig[online_mask2].flatten()
+
+        print("Starting plotting")
+        plot_histogram([online_data,online_data2],[cat_name,cat_name2], key, process_name, cat_name, base_dir)
