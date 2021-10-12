@@ -1,7 +1,8 @@
 local_setup.sh
-
+plots*
 training_output/*
 training_output
+Trainings*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
